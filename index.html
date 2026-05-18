@@ -366,7 +366,7 @@ body{
 /* ============================================================
    Gemini API 키 관리 — localStorage 전용, 코드/GitHub 비노출
    ============================================================ */
-var GEMINI_MODEL = "gemini-2.0-flash-preview-image-generation";
+var GEMINI_MODEL = "imagen-3.0-generate-002";
 var REACT_MODEL  = "claude-haiku-4-5-20251001"; // 빠른 반응용
 var GK  = 'gemcap_gk';  // Gemini key
 var CK  = 'gemcap_ck';  // Claude key
@@ -498,19 +498,19 @@ function generateGeminiImage(){
 
   var fetchUrl, fetchOpts;
 
+  // 1. Worker를 통한 호출 우선 (CORS 프리 패스)
   if(WORKER_URL && token){
-    /* ── Worker 경로 ── */
     fetchUrl = WORKER_URL + '/gemini';
     fetchOpts = {
       method:'POST',
       headers:{'Content-Type':'application/json','X-App-Token':token},
       body: JSON.stringify({
         contents:[{parts:[{text:buildImagePrompt()}]}],
-        generationConfig:{responseModalities:['TEXT','IMAGE']}
+        generationConfig:{responseModalities:['IMAGE']} // 이미지 생성 유도
       })
     };
   } else {
-    /* ── 직접 호출 폴백 (개인 Gemini 키) ── */
+    // 2. 개인 API 키 직접 호출 (모델명 수정 반영)
     fetchUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' +
                GEMINI_MODEL + ':generateContent?key=' + apiKey;
     fetchOpts = {
@@ -518,13 +518,21 @@ function generateGeminiImage(){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         contents:[{parts:[{text:buildImagePrompt()}]}],
-        generationConfig:{responseModalities:['TEXT','IMAGE']}
+        generationConfig:{responseModalities:['IMAGE']}
       })
     };
   }
 
   fetch(fetchUrl, fetchOpts)
-  .then(function(r){ if(!r.ok) throw r.status; return r.json(); })
+  .then(function(r){ 
+    if(!r.ok) {
+      return r.text().then(function(errText) {
+        console.error("Gemini API Error Response:", errText);
+        throw new Error("HTTP " + r.status + ": " + errText);
+      });
+    } 
+    return r.json(); 
+  })
   .then(function(d){
     var cands = d.candidates || [];
     var parts = (cands[0] && cands[0].content && cands[0].content.parts) || [];
@@ -532,16 +540,17 @@ function generateGeminiImage(){
     for(var i = 0; i < parts.length; i++){
       if(parts[i].inlineData){ imgPart = parts[i]; break; }
     }
-    if(!imgPart){ throw 'no-image'; }
+    if(!imgPart){ throw new Error('응답 데이터에서 이미지(inlineData)를 찾을 수 없습니다.'); }
     var src = 'data:' + imgPart.inlineData.mimeType + ';base64,' + imgPart.inlineData.data;
     box.innerHTML = '<img id="aiImgEl" src="' + src + '">';
   })
   .catch(function(err){
-    // Restore SVG on failure
+    console.error("Image Generation Failure:", err);
+    // 실패 시 기본 내장 SVG 그래픽으로 롤백
     drawSVG();
     var ov = document.getElementById('imgov');
-    if(ov) ov.innerHTML += '<p style="font-size:11px;color:var(--muted);margin-top:6px">' +
-      'AI 이미지 생성 실패 (오류: ' + err + ')</p>';
+    if(ov) ov.innerHTML += '<p style="font-size:11px;color:#d9705a;margin-top:6px">' +
+      'AI 이미지 생성 실패 (콘솔 로그를 확인하세요)</p>';
   });
 }
 
