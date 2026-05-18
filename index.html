@@ -444,8 +444,9 @@ function callClaude(model, messages, maxTokens, onDone, fallback){
 
 /* 답변 후 1줄 공감 반응 */
 function addReaction(question, answer, nextFn){
+  var token  = getToken();
   var apiKey = getClaudeKey();
-  if(!apiKey){ nextFn(); return; }
+  if(!((WORKER_URL && token) || apiKey)){ nextFn(); return; }
   var prompt = "당신은 따뜻한 명상 코치입니다.\n" +
     "사용자 질문: " + question + "\n" +
     "사용자 답변: " + answer + "\n\n" +
